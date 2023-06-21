@@ -4,8 +4,10 @@
 
 #simulation des patients -> lors des AI, les patients ne peuvent pas être inclus en même temps 
 
-param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
-param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
+param_eff=c(0.2,0.2,0.4,0.4,0.4,0.2,0.4,0.3)
+param_tox=c(0.35,0.15,0.35,0.15,0.05,0.05,0.45,0.25)
+#param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
+#param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
 scenario=paste("Scenario",1:8)
 grid=cbind(data.frame(scenario,param_eff,param_tox))
 colnames(grid)=c("Scenario","Peff","Ptox")
@@ -24,9 +26,6 @@ sample1=sample2=sample3=0
 result1=result2=result3=rep(NA,ntrials) #pour compter le nb d'échecs pour toxicité 
 time=rep(NA,ntrials)
 t_obs=4
-theta0=0.2
-tau=0.9
-
 
 
 for (i in 1:nrow(grid))  {
@@ -44,8 +43,9 @@ for (i in 1:nrow(grid))  {
   
   nb_eff=nb_ech=nb_tox=0
   res_etape1=res_etape2=res_etape3=rep(NA,10000)
-  sample1=sample2=sample3=0
+  sample=sample1=sample2=sample3=0
   result1=result2=result3=rep(NA,10000) #pour compter le nb d'échecs pour toxicité 
+  p_eff=p_ech=p_tox=rep(NA,ntrials)
   check_stop1=check_stop2=rep(NA,ntrials)
   
   set.seed(3003)
@@ -79,6 +79,12 @@ for (i in 1:nrow(grid))  {
     }
     patient=cbind(patient,cumsum(pois))
     
+    nbeff1=nbeff2=nbeff3=0
+    nbech1=nbech2=nbech3=0
+    nbtox1=nbtox2=nbtox3=0
+    sample1=sample2=sample3=0
+    
+    
     #ETAPE 1 (évaluation de la toxicité uniquement)
     stage1=patient[1:n1,]
     eff1=sum(stage1[,1])+sum(stage1[,2])
@@ -87,10 +93,14 @@ for (i in 1:nrow(grid))  {
     
     if (tox1<ct1) {res_etape1[n]<-"succes"} else {res_etape1[n]<-"echec"}
     #if (pbeta(theta0, a0+tox1, b0+(n1-tox1), lower.tail=F) < tau) {res_etape1[n]<-"succes"} else {res_etape1[n]<-"echec"}
-    sample1=sample1+n1
+    sample=sample+n1
+    sample1=n1
     nb_eff=nb_eff+eff1
     nb_ech=nb_ech+ech1
     nb_tox=nb_tox+tox1
+    nbeff1=eff1
+    nbech1=ech1
+    nbtox1=tox1
     
     #raison de l'arrêt
     if (res_etape1[n]=="echec") {result1[n]<-"tox:excessive"}
@@ -112,10 +122,14 @@ for (i in 1:nrow(grid))  {
       
       if (eff2>r1 && tox1+tox2<ct2) {res_etape2[n]<-"succes"} else {res_etape2[n]<-"echec"}
       #if (pbeta(theta0, a0+tox2+tox1, b0+(n2-tox2-tox1), lower.tail=F) < tau && eff2 > r1) {res_etape2[n]<-"succes"} else {res_etape2[n]<-"echec"}
-      sample2=sample2+n2-n1
+      sample=sample+n2-n1
+      sample2=n2-n1
       nb_eff=nb_eff+eff2
       nb_ech=nb_ech+ech2
       nb_tox=nb_tox+tox2
+      nbeff2=eff2
+      nbech2=ech2
+      nbtox2=tox2
       
       #raison de l'arrêt
       if (res_etape2[n]=="echec") {
@@ -140,10 +154,14 @@ for (i in 1:nrow(grid))  {
         
         if (eff2+eff3>R && tox1+tox2+tox3<CT) {res_etape3[n]<-"succes"} else {res_etape3[n]<-"echec"}
         #if (pbeta(theta0, a0+tox3+tox2+tox1, b0+(N-tox3-tox2-tox1), lower.tail=F) < tau && eff2+eff3 > R) {res_etape3[n]<-"succes"} else {res_etape3[n]<-"echec"}
-        sample3=sample3+N-n2
+        sample=sample+N-n2
+        sample3=N-n2
         nb_eff=nb_eff+eff3
         nb_ech=nb_ech+ech3
         nb_tox=nb_tox+tox3
+        nbeff3=eff3
+        nbech3=ech3
+        nbtox3=tox3
         
         #raison de l'arrêt
         if (res_etape3[n]=="echec") {
@@ -166,15 +184,19 @@ for (i in 1:nrow(grid))  {
       
     }
     
+    p_eff[n] <- (nbeff1+nbeff2+nbeff3) / (sample1+sample2+sample3) 
+    p_ech[n] <- (nbech1+nbech2+nbech3) / (sample1+sample2+sample3) 
+    p_tox[n] <- (nbtox1+nbtox2+nbtox3) / (sample1+sample2+sample3)
+    
   }
   
   #% de succès total
   if (all(is.na(res_etape3[res_etape3=="succes"]))) {
-    grid$H11[i] <- 0
+    grid$succes[i] <- 0
   } else {
-    grid$H11[i] <- table(res_etape3[res_etape3=="succes"])/100
+    grid$succes[i] <- table(res_etape3[res_etape3=="succes"])/100
   }
-  print(paste(grid$H11[i],"% de succès"))
+  print(paste(grid$succes[i],"% de succès"))
   
   #% arrêt précoce
   if (all(is.na(res_etape2[res_etape2=="echec"])) && all(is.na(res_etape1[res_etape1=="echec"]))) {
@@ -185,16 +207,22 @@ for (i in 1:nrow(grid))  {
   
   
   #effectif attendu
-  grid$ess[i] <- (sample1+sample2+sample3)/ntrials
+  grid$ess[i] <- sample/ntrials
   
   #nb d'efficacités 
   grid$moy_eff[i] <- nb_eff/ntrials
+  grid$prob_eff[i] <- nb_eff/sample
+  grid$prob_eff2[i] <- mean(p_eff)
   
   #nb d'échecs
   grid$moy_ech[i] <- nb_ech/ntrials
+  grid$prob_ech[i] <- nb_ech/sample
+  grid$prob_ech2[i] <- mean(p_ech)
   
   #nb de toxicités 
   grid$moy_tox[i] <- nb_tox/ntrials
+  grid$prob_tox[i] <- nb_tox/sample
+  grid$prob_tox2[i] <- mean(p_tox)
   
   #durée de l'essai
   grid$moy_time[i] <- mean(time)
@@ -291,7 +319,7 @@ for (i in 1:nrow(grid))  {
   
 }
 
-writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\Simon+TOX_tpspoisAI.xlsx")
+writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\Simon+TOX_tpspoisAI+prob.xlsx")
 
 ######### Simon + TOX (grid search) #########
 #code avec matrice : résultats des 8 scenarios pour les 56 valeurs possibles de theta0 et tau

@@ -15,8 +15,10 @@ sample1=sample2=0
 time=rep(NA,ntrials)
 t_obs=4
 
-param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
-param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
+#param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
+#param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
+param_eff=c(0.2,0.2,0.4,0.4,0.4,0.2,0.4,0.3)
+param_tox=c(0.35,0.15,0.35,0.15,0.05,0.05,0.45,0.25)
 scenario=paste("Scenario",1:8)
 grid=cbind(data.frame(scenario,param_eff,param_tox))
 colnames(grid)=c("Scenario","Peff","Ptox")
@@ -38,9 +40,9 @@ for (i in 1:nrow(grid)) {
   res_etape1=res_etape2=rep(NA,ntrials)
   result1=result2=rep(NA,ntrials)
   nb_eff=nb_ech=nb_tox=nb_notox=0
-  sample1=sample2=0
+  sample=sample1=sample2=0
   time=rep(NA,ntrials)
-  check_stop1=rep(NA,ntrials)
+  p_eff=p_ech=p_tox=rep(NA,ntrials)
   
   
   set.seed(3003)
@@ -75,6 +77,11 @@ for (i in 1:nrow(grid)) {
     }
     patient=cbind(patient,cumsum(pois))
     
+    nbeff1=nbeff2=0
+    nbech1=nbech2=0
+    nbtox1=nbtox2=0
+    sample1=sample2=0
+    
     #ETAPE 1
     stage1=patient[1:N1,]
     eff1=sum(stage1[,1])+sum(stage1[,2])
@@ -83,11 +90,15 @@ for (i in 1:nrow(grid)) {
     notox1=sum(stage1[,1])+sum(stage1[,3])
     
     if (eff1 > CR1 && notox1 > CT1) {res_etape1[n]<-"succes"} else {res_etape1[n] <- "echec"}
-    sample1=sample1+N1
+    sample=sample+N1
+    sample1=N1
     nb_eff=nb_eff+eff1
     nb_ech=nb_ech+ech1
     nb_tox=nb_tox+tox1
     nb_notox=nb_notox+notox1
+    nbeff1=eff1
+    nbech1=ech1
+    nbtox1=tox1
     
     #raison de l'arrêt précoce
     if (eff1<=CR1 && notox1<=CT1) {result1[n]<-"tox:excessive ; rep:inadequate"}
@@ -100,8 +111,6 @@ for (i in 1:nrow(grid)) {
     #print(paste("Résultat:",res_etape1[n],result1[n]))
     #print(paste("durée",time[n]))
     
-    #vérification inclusion AI
-    if (patient[N1,5]==patient[N1+1,5]) {check_stop1[n] <- "STOP"} else {"OK"}
     
     #ETAPE 2
     if (res_etape1[n]=="succes") {
@@ -112,11 +121,15 @@ for (i in 1:nrow(grid)) {
       notox2=sum(stage2[,1])+sum(stage2[,3])
       
       if (eff1+eff2 > CR2 && notox1+notox2 > CT2) {res_etape2[n]<-"succes"} else {res_etape2[n] <- "echec"}
-      sample1=sample1+N2-N1
+      sample=sample+N2-N1
+      sample2=N2-N1
       nb_eff=nb_eff+eff2
       nb_ech=nb_ech+ech2
       nb_tox=nb_tox+tox2
       nb_notox=nb_notox+notox2
+      nbeff2=eff2
+      nbech2=ech2
+      nbtox2=tox2
       
       #raison de l'échec 
       if (eff1+eff2<=CR2 && notox1+notox2<=CT2) {result2[n]<-"tox:excessive ; rep:inadequate"}
@@ -134,19 +147,29 @@ for (i in 1:nrow(grid)) {
       
     }
     
+    p_eff[n] <- (nbeff1+nbeff2) / (sample1+sample2) 
+    p_ech[n] <- (nbech1+nbech2) / (sample1+sample2) 
+    p_tox[n] <- (nbtox1+nbtox2) / (sample1+sample2) 
+    
   }
   
   #effectif attendu
-  grid$ess[i] <- (sample1+sample2)/ntrials
+  grid$ess[i] <- sample/ntrials
   
   #nb d'efficacités 
   grid$moy_eff[i] <- nb_eff/ntrials
+  grid$prob_eff[i] <- nb_eff/sample
+  grid$prob_eff2[i] <- mean(p_eff)
   
   #nb d'échecs
   grid$moy_ech[i] <- nb_ech/ntrials
+  grid$prob_ech[i] <- nb_ech/sample
+  grid$prob_ech2[i] <- mean(p_ech)
   
   #nb de toxicités 
   grid$moy_tox[i] <- nb_tox/ntrials
+  grid$prob_tox[i] <- nb_tox/sample
+  grid$prob_tox2[i] <- mean(p_tox)
   
   #durée de l'essai
   grid$moy_time[i] <- mean(time)
@@ -210,31 +233,24 @@ for (i in 1:nrow(grid)) {
   } else {
     grid$res1_toxE_repI[i] <- table(result1[result1=="tox:excessive ; rep:inadequate"])
   }
-  if (all(is.na(result1[result1=="tox:excessive ; rep:OK"]))) {
+  if (all(is.na(result1[result1=="tox:excessive ; rep:insuf data"]))) {
     grid$res1_toxE_repO[i] <- 0
   } else {
-    grid$res1_toxE_repO[i] <- table(result1[result1=="tox:excessive ; rep:OK"])
+    grid$res1_toxE_repO[i] <- table(result1[result1=="tox:excessive ; rep:insuf data"])
   }
-  if (all(is.na(result1[result1=="tox:OK ; rep:inadequate"]))) {
+  if (all(is.na(result1[result1=="tox:insuf data ; rep:inadequate"]))) {
     grid$res1_toxO_repI[i] <- 0
   } else {
-    grid$res1_toxO_repI[i] <- table(result1[result1=="tox:OK ; rep:inadequate"])
+    grid$res1_toxO_repI[i] <- table(result1[result1=="tox:insuf data ; rep:inadequate"])
   }
   
   #% arrêt pour tox
   grid$stop_tox[i] <- grid$res1_toxE_repI[i]+grid$res1_toxE_repO[i]+grid$res2_toxE_repI[i]+grid$res2_toxE_repO[i]
   
-  #vérification s'il y a pb lors des AI (patients inclus en même temps)
-  if (all(is.na(check_stop1[check_stop1=="STOP"]))) {
-    grid$check_AI1[i] <- 0
-  } else {
-    grid$check_AI1[i] <- table(check_stop1[check_stop1=="STOP"])
-  }
-  
   
 }
 
-writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\Bryant&Day_tpspoisAI.xlsx")
+writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\Bryant&Day_tpspoisAI+prob.xlsx")
 
 
 

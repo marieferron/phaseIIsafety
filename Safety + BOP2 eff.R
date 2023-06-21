@@ -17,8 +17,10 @@ nb_tox=0 #nombre de toxicités à chaque étape
 time=rep(NA,ntrials)
 t_obs=4 #mesure de l'outcome (au bout de 4 sem = 28j)
 
-param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
-param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
+#param_eff=c(0.2,0.4,0.4,0.2,0.4,0.2,0.4,0.3)
+#param_tox=c(0.35,0.15,0.05,0.05,0.45,0.15,0.35,0.2)
+param_eff=c(0.2,0.2,0.4,0.4,0.4,0.2,0.4,0.3)
+param_tox=c(0.35,0.15,0.35,0.15,0.05,0.05,0.45,0.25)
 scenario=paste("Scenario",1:8)
 grid=cbind(data.frame(scenario,param_eff,param_tox))
 colnames(grid)=c("Scenario","Peff","Ptox")
@@ -41,8 +43,9 @@ for (g in 1:nrow(grid)) {
   nb_eff=0 #nombre de réponses (succès) à chaque étape
   nb_ech=0 #nombre de non-réponses (échecs) à chaque étape
   nb_tox=0 #nombre de toxicités à chaque étape
-  sample_safety=sample1=sample2=0 #comptage du nombre de patients à chaque étape
+  sample=0 #comptage du nombre de patients à chaque étape
   time=rep(NA,ntrials)
+  p_eff=p_ech=p_tox=rep(NA,ntrials)
   check_stop1=check_stop2=rep(NA,ntrials)
   
   
@@ -80,6 +83,12 @@ for (g in 1:nrow(grid)) {
     limite=0
     rep_safe=rep_echec=0
     
+    nbeff1=nbeff2=nbeff3=0
+    nbech1=nbech2=nbech3=0
+    nbtox1=nbtox2=nbtox3=0
+    sample1=sample2=sample3=0
+    
+    
     #SAFETY LEAD-IN
     for (i in 1:n_sl) {
       limite=limite + patient[,2][i] + patient[,4][i]
@@ -89,15 +98,23 @@ for (g in 1:nrow(grid)) {
     }
     if (limite==2) {res_safety[n]<-"echec"} else {res_safety[n]<-"succes_s"} 
     if (res_safety[n]=="echec") {
-      sample_safety=sample_safety+i+1
+      sample=sample+i+1
+      sample1=i+1
       nb_eff=nb_eff+rep_safe+patient[,1][i+1] + patient[,2][i+1]
       nb_ech=nb_ech+rep_echec+patient[,3][i+1] + patient[,4][i+1]
       nb_tox=nb_tox+limite+patient[,2][i+1] + patient[,4][i+1]
+      nbeff1=rep_safe+patient[,1][i+1] + patient[,2][i+1]
+      nbech1=rep_echec+patient[,3][i+1] + patient[,4][i+1]
+      nbtox1=limite+patient[,2][i+1] + patient[,4][i+1]
     } else {
-      sample_safety=sample_safety+i
+      sample=sample+i
+      sample1=i
       nb_eff=nb_eff+rep_safe
       nb_ech=nb_ech+rep_echec
       nb_tox=nb_tox+limite
+      nbeff1=rep_safe
+      nbech1=rep_echec
+      nbtox1=limite
     }
     
     #print(paste("essai",n))
@@ -121,10 +138,14 @@ for (g in 1:nrow(grid)) {
       tox1=sum(patient[n_sl+1:(n1-n_sl),2]) + sum(patient[n_sl+1:(n1-n_sl),4])
       
       if (eff1>r1) {res_int1[n]<-"succes"} else {res_int1[n]<-"echec"} #0=échec ; 1=succès (passage à l'étape 2)
-      sample1=sample1+n1-n_sl
+      sample=sample+n1-n_sl
+      sample2=n1-n_sl
       nb_eff=nb_eff+eff1
       nb_ech=nb_ech+ech1
       nb_tox=nb_tox+tox1
+      nbeff2=eff1
+      nbech2=ech1
+      nbtox2=tox1
       #print(paste(n1-n_sl,"patients",eff1,"efficacités",tox1,"toxicités"))
       #print(paste("Résultat étape1:",res_int1[n]))
       
@@ -143,10 +164,14 @@ for (g in 1:nrow(grid)) {
         tox2=sum(patient[n1+1:(N-n1),2]) + sum(patient[n1+1:(N-n1),4])
         
         if (eff1+eff2>R) {res_int2[n]<-"succes"} else {res_int2[n]<-"echec"} #0=échec ; 1=succès (conclu d'efficacité)
-        sample2=sample2+N-n1
+        sample=sample+N-n1
+        sample3=N-n1
         nb_eff=nb_eff+eff2
         nb_ech=nb_ech+ech2
         nb_tox=nb_tox+tox2
+        nbeff3=eff2
+        nbech3=ech2
+        nbtox3=tox2
         #print(paste(N-n1,"patients",eff2,"efficacités",tox2,"toxicités"))
         #print(paste("Résultat étape2:",res_int2[n]))
         
@@ -163,19 +188,29 @@ for (g in 1:nrow(grid)) {
       
     }
     
+    p_eff[n] <- (nbeff1+nbeff2+nbeff3) / (sample1+sample2+sample3) 
+    p_ech[n] <- (nbech1+nbech2+nbech3) / (sample1+sample2+sample3) 
+    p_tox[n] <- (nbtox1+nbtox2+nbtox3) / (sample1+sample2+sample3)
+    
   }
   
   #effectif attendu
-  grid$ess[g] <- (sample_safety+sample1+sample2)/ntrials
+  grid$ess[g] <- sample/ntrials
   
   #nb d'efficacités 
   grid$moy_eff[g] <- nb_eff/ntrials
+  grid$prob_eff[g] <- nb_eff/sample
+  grid$prob_eff2[g] <- mean(p_eff)
   
   #nb d'échecs
   grid$moy_ech[g] <- nb_ech/ntrials
+  grid$prob_ech[g] <- nb_ech/sample
+  grid$prob_ech2[g] <- mean(p_ech)
   
   #nb de toxicités 
   grid$moy_tox[g] <- nb_tox/ntrials
+  grid$prob_tox[g] <- nb_tox/sample
+  grid$prob_tox2[g] <- mean(p_tox)
   
   #durée de l'essai
   grid$moy_time[g] <- mean(time)
@@ -250,7 +285,7 @@ for (g in 1:nrow(grid)) {
 }
 
 
-writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\safety1dose_BOP2eff_tpspoisAI.xlsx")
+writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\safety1dose_BOP2eff_tpspoisAI+prob.xlsx")
 
 
 
@@ -261,7 +296,7 @@ param_eff=c(0.2, 0.2, 0.4, 0.4, 0.2, 0.4, 0.2, 0.1, 0.4, 0.4, 0.2, 0.3, 0.1)
 param_tox=c(0.35, 0.05, 0.15, 0.05, 0.35, 0.45, 0.15, 0.05, 0.35, 0.15, 0.15, 0.2, 0.15)
 param_eff2=c(0.4, 0.4, 0.5, 0.5, 0.3, 0.6, 0.4, 0.2, 0.5, 0.6, 0.3, 0.4, 0.2)
 param_tox2=c(0.5, 0.15, 0.35, 0.15, 0.45, 0.5, 0.35, 0.15, 0.45, 0.45, 0.2, 0.35, 0.35)
-scenario=paste("Scenario",1:13)
+scenario=paste("Scenario",9:21)
 grid=cbind(data.frame(scenario,param_eff,param_tox,param_eff2,param_tox2))
 colnames(grid)=c("Scenario","Peff","Ptox","Peff2","Ptox2")
 
@@ -296,6 +331,7 @@ for (g in 1:nrow(grid)) {
   
   res_safety=res_int1=res_int2=rep(NA,ntrials) #nombre d'échecs et succès pour chaque essai
   i=l=0
+  sample=0
   sample_s=sample1_d1=sample2_d1=0
   sample_s2=sample1_d2=sample2_d2=0
   nb_eff=0 #nombre de réponses (succès) à chaque étape
@@ -304,6 +340,7 @@ for (g in 1:nrow(grid)) {
   time=rep(NA,ntrials)
   t_obs=4
   timesafe=rep(NA,ntrials)
+  p_eff=p_tox=rep(NA,ntrials)
   
   
   set.seed(3003)
@@ -313,7 +350,7 @@ for (g in 1:nrow(grid)) {
     pois=c(0,rpois(N-1,2))
     patient_7=pois[7]
     patient_26=pois[26]
-    patient_29=pois[29]
+    #patient_29=pois[29]
     
     if (patient_7==0) {
       while(patient_7==0) {
@@ -327,17 +364,22 @@ for (g in 1:nrow(grid)) {
       }
       pois[26]<-patient_26
     }
-    if (patient_29==0) {
-      while(patient_29==0) {
-        patient_29<-rpois(1,2)
-      }
-      pois[29]<-patient_29
-    }
+    # if (patient_29==0) {
+    #   while(patient_29==0) {
+    #     patient_29<-rpois(1,2)
+    #   }
+    #   pois[29]<-patient_29
+    # }
     patient=cbind(patient,cumsum(pois))
     
     limite=limite2=0
     rep_safe=rep_echec=0
     
+    sample_s=sample1_d1=sample2_d1=0
+    sample_s2=sample1_d2=sample2_d2=0
+    
+    nbeff_s1=nbeff_s2=nbeff_1d1=nbeff_2d1=nbeff_1d2=nbeff_2d2=0
+    nbtox_s1=nbtox_s2=nbtox_1d1=nbtox_2d1=nbtox_1d2=nbtox_2d2=0
     
     #SAFETY LEAD-IN (DL1)
     for (i in 1:n_sl) {
@@ -348,15 +390,21 @@ for (g in 1:nrow(grid)) {
     }
     if (limite==2) {res_safety[n]<-"echec"} else {res_safety[n]<-"succes DL1"} #0=échec ; 1=succès (passage à l'étape 1)
     if (res_safety[n]=="echec") {
-      sample_s=sample_s+i+1
+      sample=sample+i+1
+      sample_s=i+1
       nb_eff=nb_eff+rep_safe+patient[,1][i+1] + patient[,2][i+1]
       nb_ech=nb_ech+rep_echec+patient[,3][i+1] + patient[,4][i+1]
       nb_tox=nb_tox+limite+patient[,2][i+1] + patient[,4][i+1]
+      nbeff_s1=rep_safe+patient[,1][i+1] + patient[,2][i+1]
+      nbtox_s1=limite+patient[,2][i+1] + patient[,4][i+1]
     } else {
-      sample_s=sample_s+i
+      sample=sample+i
+      sample_s=i
       nb_eff=nb_eff+rep_safe
       nb_ech=nb_ech+rep_echec
       nb_tox=nb_tox+limite
+      nbeff_s1=rep_safe
+      nbtox_s1=limite
     }
     #print(paste("essai",n))
     #print(paste(i,"patients",limite,"toxicity",rep_safe,"efficacités",rep_echec,"échecs"))
@@ -375,16 +423,19 @@ for (g in 1:nrow(grid)) {
       tox1=sum(patient[n_sl+1:(n1-n_sl),2]) + sum(patient[n_sl+1:(n1-n_sl),4])
       
       if (eff1 > r1) {res_int1[n]<-"succes1 DL1"} else {res_int1[n]<-"echec"} 
-      sample1_d1=sample1_d1+n1-n_sl
+      sample=sample+n1-n_sl
+      sample1_d1=n1-n_sl
       nb_eff=nb_eff+eff1
       nb_ech=nb_ech+ech1
       nb_tox=nb_tox+tox1
+      nbeff_1d1=eff1
+      nbtox_1d1=tox1
       #print(paste(n1-n_sl,"patients",eff1,"efficacités",ech1,"échecs",tox1,"toxicités"))
       #print(paste("Résultat étape1:",res_int1[n]))
       
       if (res_int1[n]=="echec") {
-        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == limite-1) {time[n]<-patient[n1,5]+2*t_obs}
-        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != limite-1) {time[n]<-patient[n1,5]+t_obs}
+        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == 1) {time[n]<-patient[n1,5]+2*t_obs}
+        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != 1) {time[n]<-patient[n1,5]+t_obs}
       }
       
       
@@ -396,18 +447,21 @@ for (g in 1:nrow(grid)) {
         tox2=sum(patient[n1+1:(N-n1),2]) + sum(patient[n1+1:(N-n1),4])
         
         if (eff1+eff2 > R) {res_int2[n]<-"succes2 DL1"} else {res_int2[n]<-"echec"} 
-        sample2_d1=sample2_d1+N-n1
+        sample=sample+N-n1
+        sample2_d1=N-n1
         nb_eff=nb_eff+eff2
         nb_ech=nb_ech+ech2
         nb_tox=nb_tox+tox2
+        nbeff_2d1=eff2
+        nbtox_2d1=tox2
         #print(paste(N-n1,"patients",eff2,"efficacités",ech2,"échecs",tox2,"toxicités"))
         #print(paste("Résultat étape2:",res_int2[n]))
         
-        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == limite-1) {
+        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == 1) {
           if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient[N,5]+3*t_obs}
           if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient[N,5]+2*t_obs}
         }
-        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != limite-1) {
+        if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != 1) {
           if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient[N,5]+2*t_obs}
           if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient[N,5]+t_obs}
         }
@@ -420,11 +474,11 @@ for (g in 1:nrow(grid)) {
       
       #SAFETY LEAD-IN (DL-1)
       #patient2=cbind(t(rmultinom(npat,1,c(peffnotox2,pefftox2,pnoeffnotox2,pnoefftox2))),cumsum(c(0,rpois(N-1,2))))
-      patient2=t(rmultinom(npat,1,c(peffnotox,pefftox,pnoeffnotox,pnoefftox)))
+      patient2=t(rmultinom(npat,1,c(peffnotox2,pefftox2,pnoeffnotox2,pnoefftox2)))
       pois2=c(0,rpois(N-1,2))
       patient_7_2=pois2[7]
       patient_26_2=pois2[26]
-      patient_29_2=pois2[29]
+      #patient_29_2=pois2[29]
       
       if (patient_7_2==0) {
         while(patient_7_2==0) {
@@ -438,12 +492,12 @@ for (g in 1:nrow(grid)) {
         }
         pois2[26]<-patient_26_2
       }
-      if (patient_29_2==0) {
-        while(patient_29_2==0) {
-          patient_29_2<-rpois(1,2)
-        }
-        pois2[29]<-patient_29_2
-      }
+      # if (patient_29_2==0) {
+      #   while(patient_29_2==0) {
+      #     patient_29_2<-rpois(1,2)
+      #   }
+      #   pois2[29]<-patient_29_2
+      # }
       patient2=cbind(patient2,cumsum(pois2))
       
       limite2=0
@@ -457,15 +511,21 @@ for (g in 1:nrow(grid)) {
       }
       if (limite2==2) {res_safety[n]<-"echec"} else {res_safety[n]<-"succes DL-1"}
       if (res_safety[n]=="echec") {
-        sample_s2=sample_s2+l+1
-        nb_eff=nb_eff+rep_safe+patient[,1][l+1] + patient[,2][l+1]
-        nb_ech=nb_ech+rep_echec+patient[,3][l+1] + patient[,4][l+1]
-        nb_tox=nb_tox+limite+patient[,2][l+1] + patient[,4][l+1]
+        sample=sample+l+1
+        sample_s2=l+1
+        nb_eff=nb_eff+rep_safe+patient2[,1][l+1] + patient2[,2][l+1]
+        nb_ech=nb_ech+rep_echec+patient2[,3][l+1] + patient2[,4][l+1]
+        nb_tox=nb_tox+limite2+patient2[,2][l+1] + patient2[,4][l+1]
+        nbeff_s2=rep_safe+patient2[,1][l+1] + patient2[,2][l+1]
+        nbtox_s2=limite2+patient2[,2][l+1] + patient2[,4][l+1]
       } else {
-        sample_s2=sample_s2+l
+        sample=sample+l
+        sample_s2=l
         nb_eff=nb_eff+rep_safe
         nb_ech=nb_ech+rep_echec
-        nb_tox=nb_tox+limite
+        nb_tox=nb_tox+limite2
+        nbeff_s2=rep_safe
+        nbtox_s2=limite2
       }
       #print(paste("essai",n))
       #print(paste(l,"patients",limite2,"toxicity",rep_safe,"efficacités",rep_echec,"échecs"))
@@ -484,19 +544,21 @@ for (g in 1:nrow(grid)) {
         tox1=sum(patient2[n_sl+1:(n1-n_sl),2]) + sum(patient2[n_sl+1:(n1-n_sl),4])
         
         if (eff1>r1) {res_int1[n]<-"succes1 DL-1"} else {res_int1[n]<-"echec"} #0=échec ; 1=succès (passage à l'étape 2)
-        sample1_d2=sample1_d2+n1-n_sl
+        sample=sample+n1-n_sl
+        sample1_d2=n1-n_sl
         nb_eff=nb_eff+eff1
         nb_ech=nb_ech+ech1
         nb_tox=nb_tox+tox1
+        nbeff_1d2=eff1
+        nbtox_1d2=tox1
         #print(paste(n1-n_sl,"patients",eff1,"efficacités",ech1,"échecs",tox1,"toxicités"))
         #print(paste("Résultat étape1:",res_int1[n]))
         
         if (res_int1[n]=="echec") {
-          if (res_int1[n]=="echec") {
-            if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == limite-1) {time[n]<-patient[n1,5]+2*t_obs+timesafe[n]}
-            if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != limite-1) {time[n]<-patient[n1,5]+t_obs+timesafe[n]}
-          }
-        } 
+          if (sum(patient2[1:(n_sl-1),2])+sum(patient2[1:(n_sl-1),4]) == 1) {time[n]<-patient2[n1,5]+2*t_obs+timesafe[n]}
+          if (sum(patient2[1:(n_sl-1),2])+sum(patient2[1:(n_sl-1),4]) != 1) {time[n]<-patient2[n1,5]+t_obs+timesafe[n]}
+        }
+         
         
         
         #BOP2 eff : analyse finale (DL-1)
@@ -507,39 +569,50 @@ for (g in 1:nrow(grid)) {
           tox2=sum(patient2[n1+1:(N-n1),2]) + sum(patient2[n1+1:(N-n1),4])
           
           if (eff1+eff2>R) {res_int2[n]<-"succes2 DL-1"} else {res_int2[n]<-"echec"} #0=échec ; 1=succès (conclu d'efficacité)
-          sample2_d2=sample2_d2+N-n1
+          sample=sample+N-n1
+          sample2_d2=N-n1
           nb_eff=nb_eff+eff2
           nb_ech=nb_ech+ech2
           nb_tox=nb_tox+tox2
+          nbeff_2d2=eff2
+          nbtox_2d2=tox2
           #print(paste(N-n1,"patients",eff2,"efficacités",ech2,"échecs",tox2,"toxicités"))
           #print(paste("Résultat étape2:",res_int2[n]))
           
-          if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) == limite-1) {
-            if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient[N,5]+3*t_obs+timesafe[n]}
-            if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient[N,5]+2*t_obs+timesafe[n]}
+          if (sum(patient2[1:(n_sl-1),2])+sum(patient2[1:(n_sl-1),4]) == 1) {
+            if (sum(patient2[n_sl+1:(n1-n_sl-1),1])+sum(patient2[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient2[N,5]+3*t_obs+timesafe[n]}
+            if (sum(patient2[n_sl+1:(n1-n_sl-1),1])+sum(patient2[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient2[N,5]+2*t_obs+timesafe[n]}
           }
-          if (sum(patient[1:(n_sl-1),2])+sum(patient[1:(n_sl-1),4]) != limite-1) {
-            if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient[N,5]+2*t_obs+timesafe[n]}
-            if (sum(patient[n_sl+1:(n1-n_sl-1),1])+sum(patient[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient[N,5]+t_obs+timesafe[n]}
+          if (sum(patient2[1:(n_sl-1),2])+sum(patient2[1:(n_sl-1),4]) != 1) {
+            if (sum(patient2[n_sl+1:(n1-n_sl-1),1])+sum(patient2[n_sl+1:(n1-n_sl-1),2]) == r1) {time[n]<-patient2[N,5]+2*t_obs+timesafe[n]}
+            if (sum(patient2[n_sl+1:(n1-n_sl-1),1])+sum(patient2[n_sl+1:(n1-n_sl-1),2]) != r1) {time[n]<-patient2[N,5]+t_obs+timesafe[n]}
           }
           
         }
       }
     }
+    
+    p_eff[n] <- (nbeff_s1+nbeff_s2+nbeff_1d1+nbeff_2d1+nbeff_1d2+nbeff_2d2)/(sample_s+sample_s2+sample1_d1+sample2_d1+sample1_d2+sample2_d2)
+    p_tox[n] <- (nbtox_s1+nbtox_s2+nbtox_1d1+nbtox_2d1+nbtox_1d2+nbtox_2d2)/(sample_s+sample_s2+sample1_d1+sample2_d1+sample1_d2+sample2_d2)
+    
   }
   
   
   #effectif attendu
-  grid$ess[g] <- (sample_s+sample_s2+sample1_d1+sample2_d1+sample1_d2+sample2_d2)/ntrials
+  grid$ess[g] <- sample/ntrials
   
   #nb d'efficacités 
   grid$moy_eff[g] <- nb_eff/ntrials
+  grid$prob_eff[g] <- nb_eff/sample
+  grid$prob_eff2[g] <- mean(p_eff)
   
   #nb d'échecs
   grid$moy_ech[g] <- nb_ech/ntrials
   
   #nb de toxicités 
   grid$moy_tox[g] <- nb_tox/ntrials
+  grid$prob_tox[g] <- nb_tox/sample
+  grid$prob_tox2[g] <- mean(p_tox)
   
   #durée de l'essai
   grid$moy_time[g] <- mean(time)
@@ -594,6 +667,16 @@ for (g in 1:nrow(grid)) {
   } else {
     grid$res_safe_echecs[g] <- table(res_safety[res_safety=="echec"])
   }
+  if (all(is.na(res_safety[res_safety=="succes DL-1"]))) {
+    grid$res_safe1_succes[g] <- 0
+  } else {
+    grid$res_safe1_succes[g] <- table(res_safety[res_safety=="succes DL-1"])
+  }
+  if (all(is.na(res_safety[res_safety=="succes DL1"]))) {
+    grid$res_safe2_succes[g] <- 0
+  } else {
+    grid$res_safe2_succes[g] <- table(res_safety[res_safety=="succes DL1"])
+  }
   
   if (all(is.na(res_int1[res_int1=="succes1 DL-1"]))) {
     grid$res1_succes[g] <- table(res_int1[res_int1=="succes1 DL1"])
@@ -607,6 +690,16 @@ for (g in 1:nrow(grid)) {
         grid$res1_succes[g] <- table(res_int1[res_int1=="succes1 DL1"]) + table(res_int1[res_int1=="succes1 DL-1"])
       }
     }
+  }
+  if (all(is.na(res_int1[res_int1=="succes1 DL1"]))) {
+    grid$res11_succes[g] <- 0
+  } else {
+    grid$res11_succes[g] <- table(res_int1[res_int1=="succes1 DL1"]) 
+  }
+  if (all(is.na(res_int1[res_int1=="succes1 DL-1"]))) {
+    grid$res12_succes[g] <- 0
+  } else {
+    grid$res12_succes[g] <- table(res_int1[res_int1=="succes1 DL-1"])
   }
   if (all(is.na(res_int1[res_int1=="echec"]))) {
     grid$res1_echecs[g] <- 0
@@ -627,6 +720,16 @@ for (g in 1:nrow(grid)) {
       }
     }
   }
+  if (all(is.na(res_int2[res_int2=="succes2 DL1"]))) {
+    grid$res21_succes[g] <- 0
+  } else {
+    grid$res21_succes[g] <- table(res_int2[res_int2=="succes2 DL1"])
+  }
+  if (all(is.na(res_int2[res_int2=="succes2 DL-1"]))) {
+    grid$res22_succes[g] <- 0
+  } else {
+    grid$res22_succes[g] <- table(res_int2[res_int2=="succes2 DL-1"])
+  }
   if (all(is.na(res_int2[res_int2=="echec"]))) {
     grid$res2_echecs[g] <- 0
   } else {
@@ -636,7 +739,7 @@ for (g in 1:nrow(grid)) {
   
 }
 
-writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\safety2doses_BOP2eff_tpspoisAI.xlsx")
+writexl::write_xlsx(grid, "C:\\util\\marie\\2022-2023\\stage\\R\\résultats\\safety2doses_BOP2eff_tpspoisAI+prob.xlsx")
 
 
 
